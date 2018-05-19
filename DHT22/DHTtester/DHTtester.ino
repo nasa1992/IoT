@@ -1,68 +1,50 @@
+#include <DHT.h>            // Khai báo sử dụng thư viện DHT
+#include <ESP8266WiFi.h>    // Khai báo sử dụng thư viện ESP8266WiFi.h để thiết lập chế độ HTTP client cho ESP8266
+#define DHTPIN 5            // Chân dữ liệu của DHT11 kết nối với GPIO4 của ESP8266
+#define DHTTYPE DHT22    // Loại DHT được sử dụng
 
-
-#include "DHT.h"
-
-#define DHTPIN 5     // what digital pin we're connected to
-
-// Uncomment whatever type you're using!
-//#define DHTTYPE DHT11   // DHT 11
-#define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321
-//#define DHTTYPE DHT21   // DHT 21 (AM2301)
-
-// Connect pin 1 (on the left) of the sensor to +5V
-// NOTE: If using a board with 3.3V logic like an Arduino Due connect pin 1
-// to 3.3V instead of 5V!
-// Connect pin 2 of the sensor to whatever your DHTPIN is
-// Connect pin 4 (on the right) of the sensor to GROUND
-// Connect a 10K resistor from pin 2 (data) to pin 1 (power) of the sensor
-
-// Initialize DHT sensor.
-// Note that older versions of this library took an optional third parameter to
-// tweak the timings for faster processors.  This parameter is no longer needed
-// as the current DHT reading algorithm adjusts itself to work on faster procs.
 DHT dht(DHTPIN, DHTTYPE);
+WiFiClient client;          // Tạo 1 biến client thuộc kiểu WiFiClient
+const char* ssid = "vtc-iot-course";      // Tên mạng Wifi được chỉ định sẽ kết nối (SSID)
+const char* password = "1234567890";  // Password của mạng Wifi được chỉ định sẽ kết nối
+const char* server = "192.168.8.191";     // Địa chỉ IP của máy khi truy cập cùng mạng WiFi
+const int port = 8000;                    // Port của server đã mở
+const int sendingInternval = 2 * 1000;    // Biến cập nhật dữ liệu sau mỗi 2s
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("DHTxx test!");
+  dht.begin();                            // Khởi tạo DHT1 11 để truyền nhận dữ liệu
+  Serial.println("Connecting");
 
-  dht.begin();
+  // Thiết lập ESP8266 là Station và kết nối đến Wifi. in ra dấu `.` trên terminal nếu chưa được kết nối
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(100);
+  }
+  Serial.println("\r\nWiFi connected");
 }
 
 void loop() {
-  // Wait a few seconds between measurements.
-  delay(2000);
 
-  // Reading temperature or humidity takes about 250 milliseconds!
-  // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
-  float h = dht.readHumidity();
-  // Read temperature as Celsius (the default)
-  float t = dht.readTemperature();
-  // Read temperature as Fahrenheit (isFahrenheit = true)
-  float f = dht.readTemperature(true);
-
-  // Check if any reads failed and exit early (to try again).
-  if (isnan(h) || isnan(t) || isnan(f)) {
+// Đọc gía trị nhiệt độ (độ C), độ ẩm. Xuất ra thông báo lỗi và thoát ra nếu dữ liệu không phải là số
+  float temp = dht.readTemperature();
+  float humi = dht.readHumidity();
+  if (isnan(temp) || isnan(humi)) {
     Serial.println("Failed to read from DHT sensor!");
     return;
   }
 
-  // Compute heat index in Fahrenheit (the default)
-  float hif = dht.computeHeatIndex(f, h);
-  // Compute heat index in Celsius (isFahreheit = false)
-  float hic = dht.computeHeatIndex(t, h, false);
+  if (client.connect(server, port)) {       // Khởi tạo kết nối đến server thông qua IP và PORT đã mở
+  //---------------------------------------------------------------------------------------
+    String req_uri = "/update?temp=" + String(temp, 1) + "&humd=" + String(humi, 1);
+    client.print("GET " + req_uri + " HTTP/1.1\n" + "Host: "+ server +"\n" + "Connection: close\n" + "Content-Length: 0\n" +"\n\n");   
+  //---------------------------------------------------------------------------------------
 
-  Serial.print("Humidity: ");
-  Serial.print(h);
-  Serial.print(" %\t");
-  Serial.print("Temperature: ");
-  Serial.print(t);
-  Serial.print(" *C ");
-  Serial.print(f);
-  Serial.print(" *F\t");
-  Serial.print("Heat index: ");
-  Serial.print(hic);
-  Serial.print(" *C ");
-  Serial.print(hif);
-  Serial.println(" *F");
+  // temp, humi chuyển từ định dạng float sang định dạng string và in ra màn hình serial      // terminal trên Arduino.
+    Serial.printf("Nhiet do %s - Do am %s\r\n", String(temp, 1).c_str(), String(humi, 1).c_str());
+  }
+  client.stop();                          // Ngắt kết nối đến server
+
+  delay(sendingInternval);
 }
